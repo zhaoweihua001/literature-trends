@@ -1,3 +1,21 @@
+---
+name: literature
+version: "1.0.0"
+description: "Analyze academic research trends for any topic. Collects papers from arXiv, Semantic Scholar, CrossRef, Papers With Code, and DBLP, then produces a structured trend analysis report with evidence chains — method trends, citation analysis, benchmark saturation, and direction suggestions."
+argument-hint: 'literature few-shot image classification | literature vision transformer --years 2023 2026 | literature domain adaptation'
+allowed-tools: Bash, Read, Write
+homepage: https://github.com/zhaoweihua001/literature-trends
+repository: https://github.com/zhaoweihua001/literature-trends
+author: zhaoweihua001
+license: MIT
+user-invocable: true
+metadata:
+  openclaw:
+    emoji: "📚"
+    requires:
+      - python: ">=3.12"
+---
+
 # /literature — Academic Literature Trend Analyzer
 
 Analyze research trends for any academic topic. Collects data from arXiv, Semantic Scholar, CrossRef, Papers With Code, and DBLP, then produces a trend analysis report with evidence chains.
