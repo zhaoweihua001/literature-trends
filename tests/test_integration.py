@@ -10,14 +10,18 @@ PYTHON = r"C:\Users\unicom\AppData\Local\Programs\Python\Python312\python.exe"
 
 
 def test_engine_runs_end_to_end():
-    """Verify engine produces valid JSON output with expected sections."""
+    """Verify engine produces valid JSON output with expected sections.
+
+    Note: With CCF venue filtering, papers may be 0 on small queries,
+    but the JSON structure should always be valid.
+    """
     result = subprocess.run(
         [PYTHON, "engine.py",
          "--topic", "few-shot image classification",
          "--categories", "cs.CV",
          "--years", "2025", "2026",
-         "--max-results", "10"],
-        capture_output=True, text=True, timeout=120,
+         "--max-results", "50"],  # more papers to get CCF hits
+        capture_output=True, text=True, timeout=300,
         cwd=SCRIPTS_DIR
     )
     assert result.returncode == 0, f"Engine failed: {result.stderr}"
@@ -29,7 +33,9 @@ def test_engine_runs_end_to_end():
     assert "method_categories" in output
     assert "yearly_stats" in output
     assert "keyword_trends" in output
-    assert output["meta"]["total_papers"] > 0
+    # With CCF filtering, papers might be few but meta should have filter_stats
+    assert "filter_stats" in output["meta"]
+    assert output["meta"]["filter_stats"]["total_raw"] > 0
 
 
 def test_engine_with_gibberish_topic():

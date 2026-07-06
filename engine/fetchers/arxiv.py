@@ -140,9 +140,11 @@ class ArxivFetcher:
 
                 # DOI from arXiv comment
                 doi = None
+                comment_text = ""
                 comment = entry.find("arxiv:comment", ns)
                 if comment is not None and comment.text:
-                    doi_match = re.search(r"doi:(\S+)", comment.text)
+                    comment_text = comment.text.strip()
+                    doi_match = re.search(r"doi:(\S+)", comment_text)
                     if doi_match:
                         doi = doi_match.group(1)
 
@@ -156,6 +158,7 @@ class ArxivFetcher:
                     "categories": categories,
                     "primary_category": categories[0] if categories else "",
                     "doi": doi,
+                    "comment": comment_text,
                     "arxiv_url": f"https://arxiv.org/abs/{arxiv_id}"
                 })
             except (AttributeError, ValueError, TypeError) as e:

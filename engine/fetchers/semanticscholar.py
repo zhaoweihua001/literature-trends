@@ -43,7 +43,7 @@ class SemanticScholarFetcher:
         self._rate_limit()
         url = "https://api.semanticscholar.org/graph/v1/paper/batch"
         params = {
-            "fields": "citationCount,citations.title,citations.isInfluential,title,year,externalIds"
+            "fields": "citationCount,citations.title,citations.isInfluential,title,year,externalIds,venue,publicationTypes"
         }
         payload = {"ids": [f"ArXiv:{a}" for a in arxiv_ids]}
         try:
@@ -63,6 +63,8 @@ class SemanticScholarFetcher:
                 influential_count = sum(
                     1 for c in citations_list if c.get("isInfluential")
                 )
+                venue_raw = item.get("venue", "") or ""
+                pub_types = item.get("publicationTypes") or []
                 output[arxiv_id] = {
                     "citation_count": citation_count,
                     "influential_citations": influential_count,
@@ -71,6 +73,8 @@ class SemanticScholarFetcher:
                     "title": item.get("title", ""),
                     "year": item.get("year"),
                     "external_ids": ext_ids,
+                    "venue_raw": venue_raw,
+                    "publication_types": pub_types,
                 }
             return output
         except (requests.RequestException, ValueError):

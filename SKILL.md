@@ -70,7 +70,7 @@ Extract from the user's command:
 - **TOPIC**: the research topic to analyze
 - **CATEGORIES**: arXiv categories (default: cs.CV)
 - **YEARS**: year range (default: last 3 years)
-- **MAX_RESULTS**: max papers to fetch (default: 200)
+- **MAX_RESULTS**: max papers to fetch (default: 100)
 
 ## Step 2: Run the Engine
 

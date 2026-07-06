@@ -38,7 +38,7 @@ def parse_args():
                         help="arXiv categories to search")
     parser.add_argument("--years", nargs=2, type=int, default=[2023, 2026],
                         help="Year range (start end)")
-    parser.add_argument("--max-results", type=int, default=200,
+    parser.add_argument("--max-results", type=int, default=100,
                         help="Max papers to fetch from arXiv")
     parser.add_argument("--ss-api-key", default=None,
                         help="Semantic Scholar API key")
@@ -140,11 +140,19 @@ def main():
 
     # Step 3: Merge and classify
     print("[3/4] Merging and classifying papers...", file=sys.stderr)
-    enriched = merge_papers(
+    enriched, filter_stats = merge_papers(
         papers, ss_data, crossref_data,
         pwc_data.get("paper_to_benchmark", {}),
         dblp_data.get("paper_venues", {})
     )
+
+    # Log filtering stats
+    print(f"  Venue filter: {filter_stats['total_raw']} raw -> "
+          f"{filter_stats['no_venue_found']} no-venue, {filter_stats['not_ccf_a_b']} not-CCF-AB, "
+          f"{filter_stats['journal_preprint']} journal-preprint -> "
+          f"{filter_stats['ccf_a_conference']+filter_stats['ccf_b_conference']+filter_stats['ccf_a_journal']+filter_stats['ccf_b_journal']} kept "
+          f"(A-conf:{filter_stats['ccf_a_conference']} B-conf:{filter_stats['ccf_b_conference']} "
+          f"A-j:{filter_stats['ccf_a_journal']} B-j:{filter_stats['ccf_b_journal']})", file=sys.stderr)
     classified = classify_all(enriched)
     method_categories = build_category_stats(classified)
 
@@ -178,6 +186,9 @@ def main():
     }
     if warnings:
         meta["warnings"] = warnings
+
+    # Add CCF filtering stats to meta
+    meta["filter_stats"] = filter_stats
 
     output = build_output(classified, meta, method_categories, keyword_trends, benchmark_trends, venue_distribution)
 
