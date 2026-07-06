@@ -41,20 +41,32 @@ class PapersWithCodeFetcher:
         }
 
     def _search_task(self, topic: str) -> Optional[str]:
-        """Search for a task by topic name."""
-        try:
-            params = {"q": topic, "items_per_page": 5}
-            resp = self.session.get(
-                f"{self.BASE_URL}/tasks/search",
-                params=params,
-                timeout=15
-            )
-            resp.raise_for_status()
-            results = resp.json().get("results", [])
-            if results:
-                return results[0].get("id")
-        except (requests.RequestException, ValueError, KeyError):
-            pass
+        """Search for a task by topic name. Tries multiple query variations."""
+        queries = [topic, topic.replace("few-shot", "few shot")]
+        # Add shorter query variations for PWC which has more limited indexing
+        short_topics = topic.split(" ")
+        if len(short_topics) > 2:
+            queries.append(" ".join(short_topics[:2]))
+
+        for q in queries:
+            try:
+                params = {"q": q, "items_per_page": 5}
+                resp = self.session.get(
+                    f"{self.BASE_URL}/tasks/search",
+                    params=params,
+                    timeout=15
+                )
+                if resp.status_code != 200:
+                    continue
+                try:
+                    data = resp.json()
+                except ValueError:
+                    continue
+                results = data.get("results", [])
+                if results:
+                    return results[0].get("id")
+            except (requests.RequestException, ValueError, KeyError):
+                continue
         return None
 
     def _get_task_metrics(self, task_id: str) -> list[dict]:

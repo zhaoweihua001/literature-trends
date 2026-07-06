@@ -27,42 +27,70 @@ class ArxivFetcher:
         start_year: int = 2023,
         end_year: int = 2026
     ) -> list[dict]:
-        """Search arXiv API, return paper records."""
-        # arXiv requires spaces to be encoded as + or %20
+        """Search arXiv API, return paper records evenly distributed across years.
+
+        Splits queries by year so that results span the full date range instead of
+        arXiv's default descending-date sort which returns mostly the most recent year.
+        """
+        years_range = list(range(end_year, start_year - 1, -1))
+        per_year = max(1, max_results // len(years_range))
+        all_papers = []
+
+        for year in years_range:
+            year_papers = self._fetch_single_year(topic, categories, year, per_year)
+            all_papers.extend(year_papers)
+
+        # Fill any remaining capacity from the most recent year
+        if len(all_papers) < max_results:
+            extra = self._fetch_single_year(
+                topic, categories, end_year,
+                max_results - len(all_papers), offset=per_year
+            )
+            all_papers.extend(extra)
+
+        return all_papers[:max_results]
+
+    def _build_query(self, topic: str, categories: Optional[list[str]]) -> str:
+        """Build arXiv search query from topic and categories."""
         query_parts = [f"all:{topic}"]
         if categories:
             cat_query = " OR ".join(f"cat:{c}" for c in categories)
             query_parts.append(f"({cat_query})")
+        return " AND ".join(query_parts)
 
-        query = " AND ".join(query_parts)
-        params = {
-            "search_query": query,
-            "start": 0,
-            "max_results": max_results,
-            "sortBy": "submittedDate",
-            "sortOrder": "descending"
-        }
+    def _fetch_single_year(
+        self, topic: str, categories: Optional[list[str]],
+        year: int, count: int, offset: int = 0
+    ) -> list[dict]:
+        """Fetch papers from a single year using arXiv date-range query."""
+        query = self._build_query(topic, categories)
+        date_from = f"{year}0101000000"
+        date_to = f"{year}1231235959"
+        date_query = f"({query}) AND submittedDate:[{date_from} TO {date_to}]"
 
-        all_papers = []
-        while len(all_papers) < max_results:
-            params["start"] = len(all_papers)
-            params["max_results"] = min(100, max_results - len(all_papers))
+        papers = []
+        while len(papers) < count:
+            params = {
+                "search_query": date_query,
+                "start": offset + len(papers),
+                "max_results": min(100, count - len(papers)),
+                "sortBy": "relevance",
+                "sortOrder": "descending"
+            }
 
             response = self._fetch_with_retry(ARXIV_API_URL, params=params)
             if response is None:
                 break
 
-            papers = self._parse_response(response.text)
-            if not papers:
+            batch = self._parse_response(response.text)
+            if not batch:
                 break
 
-            # Filter by year range
-            papers = [p for p in papers if start_year <= p["year"] <= end_year]
-            all_papers.extend(papers)
+            batch = [p for p in batch if p["year"] == year]
+            papers.extend(batch)
+            time.sleep(3)
 
-            time.sleep(3)  # arXiv rate limit: 1 request per 3 seconds
-
-        return all_papers[:max_results]
+        return papers[:count]
 
     def _fetch_with_retry(self, url: str, params: dict, max_retries: int = MAX_RETRIES):
         for attempt in range(max_retries):

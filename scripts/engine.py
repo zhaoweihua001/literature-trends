@@ -14,6 +14,10 @@ import argparse
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# Fix Windows stdout encoding for Unicode (emojis, non-ASCII)
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+    sys.stdout.reconfigure(encoding="utf-8") if hasattr(sys.stdout, "reconfigure") else None
+
 # Ensure engine package is importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
