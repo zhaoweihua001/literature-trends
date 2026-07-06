@@ -80,6 +80,9 @@ def normalize_venue(raw_venue: str) -> str | None:
     # Remove trailing year like " (2024)" or "2024"
     normalized = normalized.rstrip("0123456789").rstrip(" (")
     normalized = normalized.strip()
+    # Skip arXiv/CoRR — they are not real venues
+    if normalized in ("corr", "arxiv", "computing research repository"):
+        return None
     return VENUE_ALIASES.get(normalized, None)
 
 
