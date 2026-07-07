@@ -26,12 +26,14 @@ Analyze research trends for any academic topic. Collects data from arXiv, Semant
 
 ```
 /literature <topic> [--categories <cats>] [--years <start> <end>] [--max-results <N>]
+/literature --doctor    (diagnose all data sources)
 ```
 
 **Examples:**
 - `/literature few-shot image classification`
 - `/literature vision transformer --categories cs.CV cs.LG`
 - `/literature domain adaptation --years 2023 2026 --max-results 300`
+- `/literature --doctor`
 
 ## Runtime Preflight
 
@@ -66,7 +68,9 @@ mkdir -p "$LITERATURE_MEMORY_DIR"
 
 ## Step 1: Parse User Intent
 
-Extract from the user's command:
+If the user's input is `--doctor`, skip research and run the diagnostic instead (see Step 2b below).
+
+Otherwise, extract from the user's command:
 - **TOPIC**: the research topic to analyze
 - **CATEGORIES**: arXiv categories (default: cs.CV)
 - **YEARS**: year range (default: last 3 years)
@@ -93,6 +97,15 @@ mkdir -p "$SAVE_DIR"
   2>/dev/null
 ```
 
+### If TOPIC is --doctor, run this instead:
+
+```bash
+SKILL_DIR="<absolute path of the directory containing this SKILL.md>"
+"${LITERATURE_PYTHON}" "${SKILL_DIR}/scripts/engine.py" --doctor 2>/dev/null
+```
+
+Display the diagnostic results (see Step 3 Doctor Mode below).
+
 ## Step 3: Claude Analyzes the JSON Output
 
 Read the JSON output and produce a trend report with:
@@ -111,6 +124,26 @@ Each insight must include:
 ## Step 4: Invite Follow-up Questions
 
 Offer to dive deeper into specific sub-directions, compare categories, or explore specific papers.
+
+---
+
+## Step 3: Doctor Mode (when --doctor was used)
+
+Read the JSON diagnostic output and format it as a human-readable health check:
+
+```markdown
+📋 数据源健康检查：
+├─ 🟢 Python: 3.12.10
+├─ 🟢 arXiv API: Connected
+├─ 🟡 Semantic Scholar: Rate limited
+│   └─ 修复：申请免费 API Key → https://www.semanticscholar.org/product/api
+├─ 🔴 DBLP: HTTP 500（临时故障）
+└─ 🟢 CCF Rankings: OK
+
+Summary: 6/9 🟢 | 1/9 🟡 | 2/9 🔴
+```
+
+Highlight sources that need attention and offer to help fix them.
 
 ---
 
