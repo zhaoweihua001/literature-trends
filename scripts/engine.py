@@ -12,6 +12,7 @@ import os
 import json
 import argparse
 import time
+import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Fix Windows stdout encoding for Unicode (emojis, non-ASCII)
@@ -33,7 +34,7 @@ from engine.output import build_output, build_keyword_trends
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Academic Literature Trend Analyzer")
-    parser.add_argument("--topic", required=True, help="Research topic to analyze")
+    parser.add_argument("--topic", help="Research topic to analyze")
     parser.add_argument("--categories", nargs="+", default=["cs.CV"],
                         help="arXiv categories to search")
     parser.add_argument("--years", nargs=2, type=int, default=[2023, 2026],
@@ -44,11 +45,217 @@ def parse_args():
                         help="Semantic Scholar API key")
     parser.add_argument("--save-dir", default=None,
                         help="Directory to save raw results")
+    parser.add_argument("--doctor", action="store_true",
+                        help="Run diagnostic checks on all data sources")
     return parser.parse_args()
+
+
+def doctor():
+    """Diagnose all data sources and print health report."""
+    results = []
+
+    # 1. Python version
+    py_ok = sys.version_info >= (3, 12)
+    results.append({
+        "name": "Python",
+        "status": "🟢" if py_ok else "🔴",
+        "detail": f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        "fix": "Install Python 3.12+ (winget install Python.Python.3.12)" if not py_ok else None,
+    })
+
+    # 2. requests
+    try:
+        import requests
+        results.append({
+            "name": "requests",
+            "status": "🟢",
+            "detail": f"requests {requests.__version__}",
+            "fix": None,
+        })
+    except ImportError:
+        results.append({
+            "name": "requests",
+            "status": "🔴",
+            "detail": "not installed",
+            "fix": "pip install -r requirements.txt",
+        })
+
+    # 3. arXiv API
+    try:
+        import requests as req
+        r = req.get("http://export.arxiv.org/api/query",
+                     params={"search_query": "all:test", "max_results": 1},
+                     timeout=10)
+        arxiv_ok = r.status_code == 200
+        results.append({
+            "name": "arXiv API",
+            "status": "🟢" if arxiv_ok else "🔴",
+            "detail": f"HTTP {r.status_code}" if not arxiv_ok else "Connected",
+            "fix": "Check network connectivity" if not arxiv_ok else None,
+        })
+    except Exception as e:
+        results.append({
+            "name": "arXiv API",
+            "status": "🔴",
+            "detail": str(e)[:60],
+            "fix": "Check network connectivity",
+        })
+
+    # 4. Semantic Scholar
+    ss_key = os.environ.get("SS_API_KEY") or None
+    try:
+        import requests as req
+        headers = {"User-Agent": "AcademicTrendsSkill/1.0"}
+        if ss_key:
+            headers["x-api-key"] = ss_key
+        r = req.get("https://api.semanticscholar.org/graph/v1/paper/ArXiv:2303.12345",
+                     params={"fields": "title,year"},
+                     headers=headers, timeout=10)
+        if r.status_code == 429:
+            results.append({
+                "name": "Semantic Scholar",
+                "status": "🟡",
+                "detail": "Rate limited (429)",
+                "fix": "Add SS_API_KEY to .env or wait 1 minute",
+            })
+        elif r.status_code == 200:
+            results.append({
+                "name": "Semantic Scholar",
+                "status": "🟢",
+                "detail": f"OK (API Key: {'✅' if ss_key else '❌'})",
+                "fix": None if ss_key else "Recommended: apply for free key at https://www.semanticscholar.org/product/api",
+            })
+        else:
+            results.append({
+                "name": "Semantic Scholar",
+                "status": "🟡",
+                "detail": f"HTTP {r.status_code}",
+                "fix": "Check network or API status",
+            })
+    except Exception as e:
+        results.append({
+            "name": "Semantic Scholar",
+            "status": "🔴",
+            "detail": str(e)[:60],
+            "fix": "Check network connectivity",
+        })
+
+    # 5. CrossRef
+    try:
+        import requests as req
+        r = req.get("https://api.crossref.org/works/10.1109/CVPR.2024.12345",
+                     params={"mailto": "user@example.com"},
+                     timeout=10)
+        cr_ok = r.status_code in (200, 404)  # 404 means API works, DOI just not found
+        results.append({
+            "name": "CrossRef",
+            "status": "🟢" if cr_ok else "🔴",
+            "detail": f"HTTP {r.status_code}" if not cr_ok else "OK",
+            "fix": None,
+        })
+    except Exception as e:
+        results.append({
+            "name": "CrossRef",
+            "status": "🔴",
+            "detail": str(e)[:60],
+            "fix": "Check network connectivity",
+        })
+
+    # 6. Papers With Code
+    try:
+        import requests as req
+        r = req.get("https://paperswithcode.com/api/v1/tasks/search",
+                     params={"q": "few-shot", "items_per_page": 1},
+                     timeout=10)
+        pwc_ok = r.status_code == 200
+        results.append({
+            "name": "Papers With Code",
+            "status": "🟢" if pwc_ok else "🔴",
+            "detail": f"HTTP {r.status_code}" if not pwc_ok else "OK",
+            "fix": None,
+        })
+    except Exception as e:
+        results.append({
+            "name": "Papers With Code",
+            "status": "🔴",
+            "detail": str(e)[:60],
+            "fix": "Check network connectivity",
+        })
+
+    # 7. DBLP
+    try:
+        import requests as req
+        r = req.get("https://dblp.org/search/publ/api",
+                     params={"q": "few-shot", "format": "json", "hits": 1},
+                     timeout=10)
+        dblp_ok = r.status_code == 200
+        results.append({
+            "name": "DBLP",
+            "status": "🟢" if dblp_ok else "🔴",
+            "detail": f"HTTP {r.status_code}" if not dblp_ok else "OK",
+            "fix": None,
+        })
+    except Exception as e:
+        results.append({
+            "name": "DBLP",
+            "status": "🔴",
+            "detail": str(e)[:60],
+            "fix": "Check network connectivity",
+        })
+
+    # 8. Firecrawl MCP
+    fc_key = os.environ.get("FIRECRAWL_API_KEY")
+    # Check .claude.json as well
+    claude_cfg_path = os.path.expanduser("~/.claude.json")
+    try:
+        if not fc_key:
+            with open(claude_cfg_path, encoding="utf-8", errors="replace") as f:
+                cfg = json.load(f)
+            proj = cfg.get("projects", {}).get("D:/mg/skill/literature-trends", {})
+            mcp = proj.get("mcpServers", {})
+            fc = mcp.get("firecrawl", {})
+            fc_key = fc.get("env", {}).get("FIRECRAWL_API_KEY", "")
+    except: pass
+
+    results.append({
+        "name": "Firecrawl MCP",
+        "status": "🟢" if fc_key else "🟡",
+        "detail": "API Key: ✅" if fc_key else "API Key: ❌",
+        "fix": None if fc_key else "Register at https://www.firecrawl.dev/ and add API Key",
+    })
+
+    # 9. CCF Ranking file
+    ccf_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "engine", "ccf_rankings.py")
+    ccf_ok = os.path.exists(ccf_path)
+    results.append({
+        "name": "CCF Rankings",
+        "status": "🟢" if ccf_ok else "🔴",
+        "detail": f"{'Found' if ccf_ok else 'Missing'}: {len(open(ccf_path, encoding='utf-8').readlines()) if ccf_ok else ''} lines" if ccf_ok else "Not found",
+        "fix": None if ccf_ok else "Re-clone repository",
+    })
+
+    # Print report
+    print(json.dumps({
+        "doctor": True,
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "platform": sys.platform,
+        "checks": results,
+        "summary": {
+            "total": len(results),
+            "green": sum(1 for r in results if r["status"] == "🟢"),
+            "yellow": sum(1 for r in results if r["status"] == "🟡"),
+            "red": sum(1 for r in results if r["status"] == "🔴"),
+        }
+    }, ensure_ascii=False, indent=2))
 
 
 def main():
     args = parse_args()
+
+    if args.doctor:
+        doctor()
+        return
+
     start_time = time.time()
 
     source_stats = {}
@@ -153,6 +360,7 @@ def main():
           f"{filter_stats['ccf_a_conference']+filter_stats['ccf_b_conference']+filter_stats['ccf_a_journal']+filter_stats['ccf_b_journal']} kept "
           f"(A-conf:{filter_stats['ccf_a_conference']} B-conf:{filter_stats['ccf_b_conference']} "
           f"A-j:{filter_stats['ccf_a_journal']} B-j:{filter_stats['ccf_b_journal']})", file=sys.stderr)
+
     classified = classify_all(enriched)
     method_categories = build_category_stats(classified)
 
